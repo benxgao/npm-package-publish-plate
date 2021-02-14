@@ -1,0 +1,63 @@
+version: 2.1
+defaults:
+  working_directory: ~/repo
+  docker:
+    - image: circleci/node:13.14
+
+jobs:
+  test:
+    steps:
+      - checkout
+
+      - restore_cache:
+          keys:
+          - v1-dependencies-{{ checksum "package.json" }}
+	  # fallback to using the latest cache if no exact match is found
+          - v1-dependencies-
+
+      - run: npm install
+      - run:
+          name: Run tests
+          command: npm test
+
+      - save_cache:
+          paths:
+            - node_modules
+          key: v1-dependencies-{{ checksum "package.json" }}
+
+      - persist_to_workspace:
+          root: ~/repo
+          paths: .
+  deploy:
+    steps:
+      - attach_workspace:
+          at: ~/repo
+      - run:
+          name: Set registry URL
+          command: npm set registry https://packagecloud.io/benxgao/boil-npm-package-ts-plate/npm/
+      - run:
+          name: Authenticate with registry
+          command: echo "//packagecloud.io/benxgao/boil-npm-package-ts-plate/npm/:_authToken=$NPM_TOKEN" > ~/repo/.npmrc
+      - run:
+          name: Build
+          command: npm run build
+      - run:
+          name: Publish package
+          command: npm publish
+
+workflows:
+  version: 2
+  test-deploy:
+    jobs:
+      - test:
+          filters:
+            tags:
+              only: /^v.*/
+      - deploy:
+          requires:
+            - test
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
